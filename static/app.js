@@ -94,3 +94,8 @@
     document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
   }
 })();
+
+// Installable app: register the service worker (only works over https or on this PC).
+if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "127.0.0.1" || location.hostname === "localhost")) {
+  window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js").catch(() => {}); });
+}

@@ -121,6 +121,8 @@ STATIC_ALIASES = {
     "/manifest.webmanifest": "manifest.webmanifest",
     "/apple-touch-icon.png": "icons/apple-touch-icon.png",
     "/favicon.ico": "icons/favicon.png",
+    "/robots.txt": "robots.txt",
+    "/sw.js": "sw.js",
 }
 CSP = ("default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; "
        "script-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self'; object-src 'none'; "
@@ -222,6 +224,7 @@ db.row_factory = sqlite3.Row
 db.executescript("""
 CREATE TABLE IF NOT EXISTS accounts (name TEXT PRIMARY KEY, password TEXT);
 CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, name TEXT NOT NULL, expires INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS usage (month TEXT NOT NULL, kind TEXT NOT NULL, n INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (month, kind));
 CREATE TABLE IF NOT EXISTS items (
     id INTEGER PRIMARY KEY,
     title TEXT,
@@ -389,6 +392,37 @@ with db:
         db.execute("INSERT INTO machines(name, kind) VALUES (?,?)", ("Machine 3", "washer"))
 
 
+# Anonymous monthly counters (no names, no addresses) so the administration can see whether the portal is used.
+USAGE_ACTIONS = {
+    "/machine-start": "laundry", "/item": "shelf_add", "/take-item": "shelf_taken",
+    "/book": "guest_booking", "/mini-note-add": "notes", "/add-mini-activity": "notes",
+}
+USAGE_KINDS = ["login_residents", "login_staff", "laundry", "shelf_add", "shelf_taken", "guest_booking", "notes"]
+
+
+def count_usage(kind):
+    try:
+        with db:
+            db.execute("INSERT INTO usage(month, kind, n) VALUES (?,?,1) ON CONFLICT(month, kind) DO UPDATE SET n = n + 1",
+                       (date.today().strftime("%Y-%m"), kind))
+    except sqlite3.Error:
+        pass  # statistics must never break the portal
+
+
+def usage_html(t):
+    months = [r[0] for r in db.execute("SELECT DISTINCT month FROM usage ORDER BY month DESC LIMIT 6")]
+    if not months:
+        return f'<p class="usage-empty">{esc(t["usage_empty"])}</p>'
+    data = {(r["month"], r["kind"]): r["n"] for r in db.execute(
+        "SELECT month, kind, n FROM usage WHERE month >= ?", (months[-1],))}
+    head = "".join(f'<th scope="col">{m[5:]}/{m[2:4]}</th>' for m in months)
+    rows = "".join(
+        f'<tr><th scope="row">{esc(t["usage_" + k])}</th>' + "".join(f"<td>{data.get((m, k), 0)}</td>" for m in months) + "</tr>"
+        for k in USAGE_KINDS)
+    return (f'<p class="usage-hint">{esc(t["usage_hint"])}</p><div class="usage-scroll"><table class="usage-table">'
+            f'<thead><tr><td></td>{head}</tr></thead><tbody>{rows}</tbody></table></div>')
+
+
 def digest(value, salt):
     return hashlib.scrypt(value.encode(), salt=salt.encode(), n=16384, r=8, p=1).hex()
 
@@ -461,7 +495,7 @@ TEXT = {
     "en": {
         "brand": "Dormitory",
         "kicker": "DORMITORY PORTAL &nbsp; / &nbsp; LOCAL DEMO",
-        "footer": "Dormitory · Preview version with sample data",
+        "footer": "Dormitory portal",
         "welcome": "Welcome home.",
         "please_login": "Please log in.",
         "admin": "Administration",
@@ -761,7 +795,7 @@ TEXT = {
     "de": {
         "brand": "Wohnheim",
         "kicker": "WOHNHEIMPORTAL &nbsp; / &nbsp; LOKALE DEMO",
-        "footer": "Wohnheim · Vorführversion mit Beispieldaten",
+        "footer": "Wohnheim-Portal",
         "welcome": "Willkommen im Haus.",
         "please_login": "Bitte anmelden.",
         "admin": "Verwaltung",
@@ -1064,6 +1098,27 @@ TEXT["de"]["page_unavailable"] = "Seite nicht verfügbar."
 
 TEXT["en"].update({
     "skip_to_content": "Skip to content",
+    "install_title": "Install the app",
+    "install_nav": "Install app",
+    "install_lead": "Put the portal on your home screen: it then opens like an app, without the browser bar. No app store needed.",
+    "install_qr_title": "Scan to open the portal",
+    "install_btn": "Install now",
+    "install_print": "Print QR poster",
+    "install_done": "The app is installed. You can find it on your home screen.",
+    "install_ios_steps": ["Open this page in Safari.", "Tap the Share button (square with arrow).", "Choose \u201cAdd to Home Screen\u201d, then \u201cAdd\u201d."],
+    "install_android_steps": ["Open this page in Chrome.", "Tap \u201cInstall now\u201d above, or the menu \u22ee then \u201cInstall app\u201d / \u201cAdd to Home screen\u201d.", "Confirm with \u201cInstall\u201d."],
+    "poster_title": "Laundry, exchange shelf, guest room & news on your phone",
+    "poster_text": "Scan the code, sign in with the residents\u2019 password and add the portal to your home screen.",
+    "usage_title": "Usage",
+    "usage_hint": "Anonymous counts per month (no names), so you can see whether the portal is used.",
+    "usage_empty": "No usage recorded yet.",
+    "usage_login_residents": "Resident sign-ins",
+    "usage_login_staff": "Staff sign-ins",
+    "usage_laundry": "Laundry starts",
+    "usage_shelf_add": "Shelf items added",
+    "usage_shelf_taken": "Shelf items taken",
+    "usage_guest_booking": "Guest room bookings",
+    "usage_notes": "Notes & mini-activities",
     "nav_main": "Main navigation",
     "tab_home": "Home",
     "tab_laundry": "Laundry",
@@ -1095,6 +1150,27 @@ TEXT["en"].update({
 })
 TEXT["de"].update({
     "skip_to_content": "Zum Inhalt springen",
+    "install_title": "App installieren",
+    "install_nav": "App installieren",
+    "install_lead": "Lege das Portal auf deinen Startbildschirm: Es öffnet sich dann wie eine App, ohne Browserleiste. Kein App Store nötig.",
+    "install_qr_title": "Scannen, um das Portal zu öffnen",
+    "install_btn": "Jetzt installieren",
+    "install_print": "QR-Poster drucken",
+    "install_done": "Die App ist installiert. Du findest sie auf deinem Startbildschirm.",
+    "install_ios_steps": ["Öffne diese Seite in Safari.", "Tippe auf Teilen (Quadrat mit Pfeil).", "Wähle \u201eZum Home-Bildschirm\u201c und dann \u201eHinzufügen\u201c."],
+    "install_android_steps": ["Öffne diese Seite in Chrome.", "Tippe oben auf \u201eJetzt installieren\u201c oder im Menü \u22ee auf \u201eApp installieren\u201c / \u201eZum Startbildschirm hinzufügen\u201c.", "Mit \u201eInstallieren\u201c bestätigen."],
+    "poster_title": "Waschmaschinen, Tauschschrank, Gästezimmer & Infos auf dem Handy",
+    "poster_text": "Code scannen, mit dem Bewohner-Passwort anmelden und das Portal auf den Startbildschirm legen.",
+    "usage_title": "Nutzung",
+    "usage_hint": "Anonyme Zahlen pro Monat (keine Namen), damit ihr seht, ob das Portal genutzt wird.",
+    "usage_empty": "Noch keine Nutzung erfasst.",
+    "usage_login_residents": "Anmeldungen Bewohner",
+    "usage_login_staff": "Anmeldungen Dienst/Verwaltung",
+    "usage_laundry": "Waschgänge gestartet",
+    "usage_shelf_add": "Gegenstände eingestellt",
+    "usage_shelf_taken": "Gegenstände mitgenommen",
+    "usage_guest_booking": "Gästezimmer-Buchungen",
+    "usage_notes": "Notizen & Mini-Aktivitäten",
     "nav_main": "Hauptmenü",
     "tab_home": "Start",
     "tab_laundry": "Waschen",
@@ -1533,6 +1609,7 @@ def tab_bar(t, section, show_admin):
     more = [("rules", "/regeln", "rules_nav"), ("guest", "/gast", "guest_room"), ("duties", "/dienste", "house_duties")]
     if show_admin:
         more.append(("admin", "/admin", "admin_settings"))
+    more.append(("install", "/app", "install_nav"))
     sheet = "".join(_link(url, t[label], key == section) for key, url, label in more)
     active = " active" if section in ("rules", "guest", "duties", "admin") else ""
     cells += ('<details class="more-menu%s"><summary class="tab tab-more"><svg aria-hidden="true" viewBox="0 0 24 24">'
@@ -1654,6 +1731,29 @@ def home_dashboard(t, lang, is_admin):
     return f'<div class="live-grid">{laundry}{news}{shelf}{guest}</div>'
 
 
+def install_page_html(t):
+    """'Install the app' page: QR code to print or show, and short instructions for iPhone and Android."""
+    steps_ios = "".join(f"<li>{esc(x)}</li>" for x in t["install_ios_steps"])
+    steps_android = "".join(f"<li>{esc(x)}</li>" for x in t["install_android_steps"])
+    return (
+        f'<p class="install-lead">{esc(t["install_lead"])}</p>'
+        f'<div class="install-grid">'
+        f'<section class="install-qr-card"><h2>{esc(t["install_qr_title"])}</h2>'
+        f'<div id="install-qr" class="install-qr" aria-label="{esc(t["install_qr_title"])}"></div>'
+        f'<p class="install-url" id="install-url"></p>'
+        f'<div class="install-actions"><button type="button" id="install-btn" hidden>{esc(t["install_btn"])}</button>'
+        f'<button type="button" id="install-print" class="btn-secondary">{esc(t["install_print"])}</button></div>'
+        f'<p class="install-done" id="install-done" hidden>{esc(t["install_done"])}</p></section>'
+        f'<section><h2>iPhone (Safari)</h2><ol class="install-steps">{steps_ios}</ol></section>'
+        f'<section><h2>Android (Chrome)</h2><ol class="install-steps">{steps_android}</ol></section>'
+        f'</div>'
+        f'<div class="install-poster" aria-hidden="true"><p class="poster-kicker">{esc(t["brand"])}</p>'
+        f'<h2>{esc(t["poster_title"])}</h2><div id="poster-qr" class="poster-qr"></div>'
+        f'<p class="poster-url" id="poster-url"></p><p class="poster-text">{esc(t["poster_text"])}</p></div>'
+        + asset_script("qrcode.js") + asset_script("install.js")
+    )
+
+
 def page(title, body, nav="", lang="en", current_path="/", compact_title=False, level="", topnav="", tabbar=""):
     t = TEXT[lang]
     path_only = urlparse(current_path or "/").path
@@ -1706,7 +1806,7 @@ def page(title, body, nav="", lang="en", current_path="/", compact_title=False, 
     return (
         f'<!doctype html><html lang="{lang}"><head><meta charset="utf-8">'
         f'<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">'
-        f'<meta name="color-scheme" content="light dark">'
+        f'<meta name="color-scheme" content="light dark"><meta name="robots" content="noindex, nofollow">'
         f'<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">'
         f'<meta name="theme-color" content="#111318" media="(prefers-color-scheme: dark)">'
         f'<meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes">'
@@ -1721,7 +1821,7 @@ def page(title, body, nav="", lang="en", current_path="/", compact_title=False, 
         f'<header class="site-header"><a class="brand" href="/">{brand_icon}<span>{t["brand"]}</span></a>{header_right}</header>'
         f"{topnav}"
         f'<main id="main"><h1{h1_cls}>{esc(title)}</h1>{body}</main>'
-        f"<footer>{t['footer']}</footer>{tabbar}{asset_script('app.js')}</body></html>"
+        f"<footer>{t['footer']} · <a href=\"/app\">{esc(t['install_nav'])}</a></footer>{tabbar}{asset_script('app.js')}</body></html>"
     )
 
 
@@ -1756,6 +1856,7 @@ class Portal(BaseHTTPRequestHandler):
             self.send_header("Content-Encoding", "gzip")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "same-origin")
+        self.send_header("X-Robots-Tag", "noindex, nofollow")  # internal site: keep it out of search engines
         if mime.startswith("text/html"):
             self.send_header("Content-Security-Policy", CSP)
             self.send_header("X-Frame-Options", "DENY")
@@ -1903,6 +2004,10 @@ class Portal(BaseHTTPRequestHandler):
         can_manage_guestroom = is_admin
         can_manage_rules_news = is_admin
         can_manage_passwords = is_admin
+
+        if path == "/app":
+            return self.reply(page(t["install_title"], install_page_html(t), lang=lang, current_path=path,
+                                   level=level, tabbar=tab_bar(t, "", can_manage_passwords) if role else ""))
 
         if not role:
             if path not in ("/", "/dienstleiter", "/admin"):
@@ -3166,7 +3271,8 @@ class Portal(BaseHTTPRequestHandler):
 
         elif path == "/admin" and can_manage_passwords:
             title = t["admin_settings"]
-            body = panel(
+            body = panel(esc(t["usage_title"]), usage_html(t), "usage-panel")
+            body += panel(
                 t["change_resident_pw"],
                 form("rotate", field(t["new_shared_pw"], "password", "password", 'minlength="10"') + button(t["change_logout_residents"])),
             )
@@ -3256,6 +3362,7 @@ class Portal(BaseHTTPRequestHandler):
                         403,
                     )
                 login_succeeded(ip)
+                count_usage("login_residents" if name == "residents" else "login_staff")
                 token = secrets.token_urlsafe(32)
                 ttl = session_ttl(name)
                 sessions[token] = (name, time.time() + ttl)
@@ -3812,6 +3919,8 @@ class Portal(BaseHTTPRequestHandler):
                     dest = "/admin"
                 else:
                     return self.reply("", 404)
+            if path in USAGE_ACTIONS:
+                count_usage(USAGE_ACTIONS[path])
             self.redirect(dest)
         except (ValueError, OverflowError) as err:
             reason = str(err.args[0]) if err.args else ""

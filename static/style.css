@@ -1828,3 +1828,45 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
   .item-card:hover { transform: none; }
 }
+
+/* ---------- Install page & QR poster ---------- */
+.install-lead { max-width: 40rem; margin-bottom: 1.25rem; color: var(--text-muted); }
+.install-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr)); gap: 1rem; align-items: start; }
+.install-grid section { margin: 0; max-width: none; }
+.install-qr-card { text-align: center; }
+.install-qr-card > h2 { justify-content: center; }
+.install-qr { width: min(100%, 13rem); margin: 0.5rem auto 0.4rem; padding: 0.5rem; background: #ffffff; border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.install-qr svg, .poster-qr svg { display: block; width: 100%; height: auto; }
+.install-url { margin: 0 0 0.9rem; color: var(--text-muted); font-size: 0.85rem; font-weight: 550; overflow-wrap: anywhere; }
+.install-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem; }
+.install-actions [hidden] { display: none; }
+.install-done { margin: 0.8rem 0 0; color: var(--ok-ink); font-size: 0.88rem; font-weight: 550; }
+.install-steps { margin: 0; padding-inline-start: 1.2rem; font-size: 0.92rem; }
+.install-steps li { margin: 0.35rem 0; }
+.install-steps li::marker { color: var(--accent-strong); font-weight: 650; }
+.install-poster { display: none; }
+
+@media print {
+  @page { size: A4; margin: 18mm; }
+  html, body { background: #ffffff !important; color: #111827 !important; }
+  body > *:not(main), main > *:not(.install-poster), .skip-link { display: none !important; }
+  main { max-width: none; padding: 0; }
+  .install-poster { display: block !important; text-align: center; padding-top: 10mm; }
+  .poster-kicker { margin: 0 0 4mm; color: #c2410c; font-size: 16pt; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+  .install-poster h2 { display: block; margin: 0 auto 10mm; max-width: 150mm; font-size: 26pt; line-height: 1.2; }
+  .install-poster h2::before { display: none; }
+  .poster-qr { width: 110mm; margin: 0 auto 6mm; }
+  .poster-url { margin: 0 0 8mm; font-size: 16pt; font-weight: 600; }
+  .poster-text { max-width: 140mm; margin: 0 auto; font-size: 15pt; color: #374151; }
+}
+
+/* ---------- Admin: usage statistics ---------- */
+.usage-hint { color: var(--text-muted); font-size: 0.85rem; }
+.usage-empty { color: var(--text-muted); font-size: 0.9rem; }
+.usage-scroll { overflow-x: auto; margin: 0 -0.25rem; }
+.usage-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+.usage-table th, .usage-table td { padding: 0.45rem 0.5rem; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+.usage-table th[scope="row"] { text-align: left; font-weight: 500; color: var(--text-muted); white-space: normal; }
+.usage-table thead th { color: var(--text-subtle); font-size: 0.75rem; font-weight: 600; }
+.usage-table tbody tr:last-child > * { border-bottom: 0; }
+footer a { color: inherit; text-decoration: underline; text-underline-offset: 0.2em; }

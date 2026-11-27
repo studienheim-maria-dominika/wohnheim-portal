@@ -25,6 +25,10 @@ Only on a fresh database does the terminal print newly generated passwords for `
 
 Use separate browsers (or a private window) to try all three at once.
 
+## Put it online
+
+See **SETUP-PYTHONANYWHERE.md**: free hosting, sharing by link or QR poster, keeping it running and handing it over.
+
 ## Test on your phone (before the site is public)
 
 1. Put the phone on the **same Wi-Fi** as this PC (not mobile data, not a separate guest network).
@@ -58,6 +62,10 @@ backups/             automatic copies of the database (made at start, newest 10 
 static/style.css     all colors and layout - edit the variables at the top
 static/photo.js      forms, calendar, laundry and photo upload
 static/app.js        small shared behaviour (kept form input, More menu, live home cards)
+static/install.js    "Install the app" page (QR code, install button)
+static/qrcode.js     QR code generator (MIT licence, Kazuhiko Arase)
+static/sw.js         makes the portal installable, shows an offline page
+wsgi.py              connects the portal to a web host (PythonAnywhere)
 static/fonts/        Outfit font (SIL Open Font License, see OFL-Outfit.txt)
 static/icons/        app icons for "Add to Home Screen"
 ```
@@ -73,6 +81,7 @@ To go back to an earlier state, stop the server and copy a file from `backups/` 
 - Home page: compact "Right now" cards in solid section colours (white text, light on hover). The shelf card shows the two most recently added items. Residents no longer see a guest room card; administrators see "x requests".
 - Notes and announcements: the title is italic and text-sized; edit, pin, vote and delete sit behind a small "…" menu in the top-right corner.
 - Exchange shelf: "Put back" works for 15 minutes after an item is marked as taken.
+- Ready for the internet: runs on PythonAnywhere (wsgi.py), hidden from search engines, "Install the app" page with printable QR poster, offline screen, anonymous usage numbers for the administration.
 
 - Phone: bottom tab bar (Home, Laundry, Shelf, Activities, More), larger tap targets, one-row header, dark mode that follows the phone setting.
 - Desktop: one-row navigation that marks the current section in its colour.
