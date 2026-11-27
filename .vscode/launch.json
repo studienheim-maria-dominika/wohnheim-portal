@@ -1,0 +1,22 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Portal (this PC only)",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/portal.py",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Portal (test on my phone, same Wi-Fi)",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/portal.py",
+      "args": ["--lan", "--no-browser"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal"
+    }
+  ]
+}

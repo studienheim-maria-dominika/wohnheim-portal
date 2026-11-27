@@ -1,0 +1,8 @@
+# Your data: accounts, photos, bookings
+*.sqlite3
+*.sqlite3-journal
+backups/
+
+__pycache__/
+*.pyc
+.venv/
