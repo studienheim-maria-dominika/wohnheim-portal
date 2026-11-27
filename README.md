@@ -27,7 +27,7 @@ Use separate browsers (or a private window) to try all three at once.
 
 ## Put it online
 
-Live at **https://mariadominika.eu.pythonanywhere.com** (share **/app**). See **SETUP-PYTHONANYWHERE.md** for where everything is, installing changes, backups, the 3-month click and the handover checklist.
+Live at **https://mariadominika.eu.pythonanywhere.com** (share **/app**). See **SETUP-PYTHONANYWHERE.md** for where everything is, installing changes, backups, the monthly click and the handover checklist.
 
 ## Test on your phone (before the site is public)
 

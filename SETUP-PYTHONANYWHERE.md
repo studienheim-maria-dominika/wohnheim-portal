@@ -19,12 +19,15 @@ Search engines are told not to list the site. Clock times always use German time
 
 ## Regular tasks
 
-### Every 3 months: keep it running (important)
+### Every month: keep it running (important)
 
-On the free plan the site stops unless someone confirms it every 3 months.
+On the free plan the site stops unless someone confirms it once a month.
 PythonAnywhere emails the account address before that happens.
 
-> Log in at <https://eu.pythonanywhere.com> → **Web** tab → click **"Run until 3 months from today"**. That's all.
+> Log in at <https://eu.pythonanywhere.com> → **Web** tab → click the **"Run until 1 month from today"** button. That's all.
+
+Tip: add a repeating monthly reminder in the dorm Gmail's Google Calendar, so it does not depend on one person remembering.
+If the site has stopped anyway, the same button starts it again: nothing is lost.
 
 ### Installing changes
 
@@ -108,5 +111,5 @@ Only needed if the portal has to be rebuilt (new account, other host). About 15 
 - [ ] GitHub login (account `studienheim-maria-dominika`) is handed over too.
 - [ ] Both accounts use an email address the dorm keeps (the dorm Gmail).
 - [ ] Passwords for `leitung`, `dienstleiter` and `residents` are handed over (or changed after the handover).
-- [ ] The next person knows the "every 3 months" click.
+- [ ] The next person knows the monthly "Run until 1 month from today" click (and the calendar reminder is on the dorm account).
 - [ ] A recent copy of `demo.sqlite3` is saved outside PythonAnywhere.
