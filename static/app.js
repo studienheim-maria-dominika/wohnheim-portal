@@ -58,6 +58,25 @@
     });
   }
 
+  // ---- "..." menus on notes: one open at a time, close on outside tap or Escape ----
+  const noteMenus = Array.from(document.querySelectorAll(".note-menu"));
+  if (noteMenus.length) {
+    noteMenus.forEach(menu => menu.addEventListener("toggle", () => {
+      if (menu.open) noteMenus.forEach(other => { if (other !== menu) other.open = false; });
+    }));
+    document.addEventListener("click", e => {
+      noteMenus.forEach(menu => {
+        if (!menu.open) return;
+        const opensEditor = e.target.closest && e.target.closest("[popovertarget]");
+        if (!menu.contains(e.target) || (opensEditor && menu.contains(opensEditor))) menu.open = false;
+      });
+    });
+    document.addEventListener("keydown", e => {
+      if (e.key !== "Escape") return;
+      noteMenus.forEach(menu => { if (menu.open) { menu.open = false; menu.querySelector("summary").focus(); } });
+    });
+  }
+
   // ---- Home page: keep "Right now" fresh ----
   const live = document.querySelector(".live-grid");
   if (live) {

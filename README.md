@@ -69,11 +69,16 @@ To go back to an earlier state, stop the server and copy a file from `backups/` 
 
 ## What is new in this version
 
+- New look: calm neutral background, white cards with soft borders, section colours used as accents, sticky header and a lighter tab bar on phones (light and dark mode).
+- Home page: compact "Right now" cards in solid section colours (white text, light on hover). The shelf card shows the two most recently added items. Residents no longer see a guest room card; administrators see "x requests".
+- Notes and announcements: the title is italic and text-sized; edit, pin, vote and delete sit behind a small "…" menu in the top-right corner.
+- Exchange shelf: "Put back" works for 15 minutes after an item is marked as taken.
+
 - Phone: bottom tab bar (Home, Laundry, Shelf, Activities, More), larger tap targets, one-row header, dark mode that follows the phone setting.
 - Desktop: one-row navigation that marks the current section in its colour.
 - Home page: live "Right now" cards (machines free, newest news, shelf, guest room requests for administrators), refreshed every minute.
 - Laundry: one tap starts a machine for 1 h, 1 h 30, ...; custom start time and length stay available.
-- Exchange shelf: small thumbnails load first, "Recently taken" with **Put back** for 7 days instead of deleting immediately.
+- Exchange shelf: small thumbnails load first, "Recently taken" with **Put back** instead of deleting immediately.
 - Forms: errors say what to check and "Back to the form" keeps what you typed.
 - Speed: stylesheet and scripts are cached files, photos are cached, pages are compressed, several visitors are served at the same time.
 - Security: too many wrong passwords pause logins for 10 minutes, logins survive a restart (residents stay signed in for 30 days, Dienstleiter 3 days, administrators 8 hours), unexpected host names are refused.

@@ -26,6 +26,7 @@ ROOT = Path(__file__).resolve().parent
 STATIC = ROOT / "static"
 BACKUPS = ROOT / "backups"
 BEDDING_FEE = 10
+TAKEN_GRACE_SECS = 15 * 60   # a shelf item marked "taken" can be put back for this long
 
 # ---- Server settings. Change them with command-line options (python3 portal.py --help),
 # ---- or with the PORTAL_* environment variables, not by editing this file.
@@ -453,7 +454,7 @@ class SessionStore:
 sessions = SessionStore()
 sessions.purge()
 with db:
-    db.execute("DELETE FROM items WHERE taken_at > 0 AND taken_at < ?", (int(time.time()) - 7 * 86400,))
+    db.execute("DELETE FROM items WHERE taken_at > 0 AND taken_at < ?", (int(time.time()) - TAKEN_GRACE_SECS,))
 session_votes = {}
 
 TEXT = {
@@ -507,7 +508,7 @@ TEXT = {
         "posted_days": "On shelf for {days} day(s)",
         "overdue_badge": "{days}+ days on shelf",
         "taken_btn": "Taken (I picked it up)",
-        "taken_confirm": "Did you physically take this item from the 5th-floor shelf? This will remove the listing; you can undo it for 7 days.",
+        "taken_confirm": "Did you physically take this item from the 5th-floor shelf? This will remove the listing; you can undo it for 15 minutes.",
         "remove": "Remove",
         "manage_shelf_admin": "Manage tags & alert threshold",
         "shelf_days_label": "Highlight items after how many days on shelf?",
@@ -805,7 +806,7 @@ TEXT = {
         "posted_days": "Seit {days} Tag(en) im Schrank",
         "overdue_badge": "Über {days} Tage im Schrank",
         "taken_btn": "Mitgenommen (Eintrag entfernen)",
-        "taken_confirm": "Hast du diesen Gegenstand physisch aus dem Tauschschrank im 5. Stock mitgenommen? Der Eintrag wird entfernt (7 Tage lang rückgängig zu machen).",
+        "taken_confirm": "Hast du diesen Gegenstand physisch aus dem Tauschschrank im 5. Stock mitgenommen? Der Eintrag wird entfernt (15 Minuten lang rückgängig zu machen).",
         "remove": "Entfernen",
         "manage_shelf_admin": "Etiketten & Zeitlimit verwalten",
         "shelf_days_label": "Gegenstände markieren ab wie vielen Tagen im Schrank?",
@@ -1069,17 +1070,14 @@ TEXT["en"].update({
     "home_all_sections": "All sections",
     "home_laundry_free": "{free} of {total} free",
     "home_news_none": "No announcements yet.",
-    "home_shelf_count": "{n} on the shelf",
+    "home_shelf_latest": "Latest added",
+    "note_actions": "Actions",
+    "home_guest_requests_one": "1 request",
+    "home_guest_requests_many": "{n} requests",
     "home_shelf_empty": "The shelf is empty.",
-    "home_guest_requests": "{n} booking request(s) waiting",
-    "home_guest_none": "No open booking requests.",
-    "home_guest_next": "Next booking: {arrival} – {departure}",
-    "home_guest_rooms": "{n} guest room(s) from {price} / night",
-    "home_guest_hint": "Open a room to see free nights and request dates.",
     "recent_taken_title": "Recently taken ({n})",
-    "recent_taken_hint": "Taken items stay here for 7 days, so a mistaken click can be undone.",
-    "taken_today": "Taken today",
-    "taken_days": "Taken {days} day(s) ago",
+    "recent_taken_hint": "Taken items stay here for 15 minutes, so a mistaken click can be undone.",
+    "taken_left": "{mins} min left to undo",
     "put_back_btn": "Put back on shelf",
     "taken_notice": "This item was marked as taken. If that was a mistake, put it back.",
     "quick_start": "Start now for",
@@ -1103,17 +1101,14 @@ TEXT["de"].update({
     "home_all_sections": "Alle Bereiche",
     "home_laundry_free": "{free} von {total} frei",
     "home_news_none": "Noch keine Mitteilungen.",
-    "home_shelf_count": "{n} im Schrank",
+    "home_shelf_latest": "Zuletzt hinzugefügt",
+    "note_actions": "Aktionen",
+    "home_guest_requests_one": "1 Anfrage",
+    "home_guest_requests_many": "{n} Anfragen",
     "home_shelf_empty": "Der Schrank ist leer.",
-    "home_guest_requests": "{n} Buchungsanfrage(n) warten",
-    "home_guest_none": "Keine offenen Buchungsanfragen.",
-    "home_guest_next": "Nächste Buchung: {arrival} – {departure}",
-    "home_guest_rooms": "{n} Gästezimmer ab {price} / Nacht",
-    "home_guest_hint": "Zimmer öffnen, freie Nächte sehen und Termine anfragen.",
     "recent_taken_title": "Kürzlich mitgenommen ({n})",
-    "recent_taken_hint": "Mitgenommene Gegenstände bleiben 7 Tage hier, damit ein versehentlicher Klick rückgängig gemacht werden kann.",
-    "taken_today": "Heute mitgenommen",
-    "taken_days": "Vor {days} Tag(en) mitgenommen",
+    "recent_taken_hint": "Mitgenommene Gegenstände bleiben 15 Minuten hier, damit ein versehentlicher Klick rückgängig gemacht werden kann.",
+    "taken_left": "Noch {mins} Min. rückgängig machbar",
     "put_back_btn": "Zurück in den Schrank",
     "taken_notice": "Dieser Gegenstand wurde als mitgenommen markiert. Falls das ein Versehen war, lege ihn zurück.",
     "quick_start": "Jetzt starten für",
@@ -1432,9 +1427,15 @@ def note_card(row, t, voted, *, mini_id=None, manage=True):
                         extra=f'onsubmit="return confirm({confirm})"')
     stamp = datetime.fromtimestamp(row["created_at"] or time.time()).strftime("%d.%m.%Y")
     badge = f'<span class="ann-pin-badge">{esc(t["pinned_badge"])}</span>' if pinned else ""
+    votes = int(row["votes"] or 0)
+    tally = (f'<span class="note-votes{" voted" if voted else ""}" title="{esc(t["upvote_title"])}">'
+             f'<svg aria-hidden="true" viewBox="0 0 24 24"><path d="{ICON_PATHS["vote"]}"/></svg>{votes}</span>') if votes else ""
     title = f'<h3>{esc(row["title"])}</h3>' if row["title"] else ""
-    return (f'<article class="ann-card{" pinned" if pinned else ""}"><div class="ann-meta">{badge}<small>{stamp}</small></div>'
-            f'{title}<p class="ann-body">{esc(row["body"])}</p><div class="note-tools">{actions}</div>{editor}</article>')
+    menu = (f'<details class="note-menu"><summary aria-label="{esc(t["note_actions"])}" title="{esc(t["note_actions"])}">'
+            f'<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 12h.01 M12 12h.01 M19 12h.01"/></svg></summary>'
+            f'<div class="note-tools">{actions}</div></details>')
+    return (f'<article class="ann-card{" pinned" if pinned else ""}"><div class="ann-meta">{badge}<small>{stamp}</small>{tally}</div>'
+            f'{menu}{title}<p class="ann-body">{esc(row["body"])}</p>{editor}</article>')
 
 
 def panel(title, body, cls=""):
@@ -1488,7 +1489,12 @@ TAB_ICONS = {
     "shelf": "M4 4.5h16v15H4z M4 12h16 M9 8.2h6 M9 15.8h6",
     "activities": "M4.5 5.5h15v14h-15z M4.5 10h15 M8.5 3.5v4 M15.5 3.5v4 M9 14h.01 M12 14h.01 M15 14h.01",
     "more": "M5.5 12h.01 M12 12h.01 M18.5 12h.01",
+    "guest": "M3 19V6 M3 15h18v4 M21 15v-3.5a2.5 2.5 0 0 0-2.5-2.5H11v6 M6.5 12.5a1.8 1.8 0 1 0 0-3.6 1.8 1.8 0 0 0 0 3.6z",
+    "duties": "M9 5h11 M9 12h11 M9 19h11 M3.5 5l1.2 1.2L7 4 M3.5 12l1.2 1.2L7 11 M3.5 19l1.2 1.2L7 18",
+    "rules": "M4 10v4 M4 10l12-5v14L4 14 M16 9.5a3 3 0 0 1 0 5 M7 14.5l1.2 5h3l-1-4.2",
+    "admin": "M12 3l7.5 3v5.5c0 4.6-3.2 8.3-7.5 9.5-4.3-1.2-7.5-4.9-7.5-9.5V6z M9.5 12l1.8 1.8 3.4-3.6",
 }
+CHEVRON = '<svg class="chev" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg>'
 
 
 def nav_section(path):
@@ -1553,19 +1559,20 @@ def fmt_dur(minutes, t):
 
 
 def purge_taken_items():
-    """Items marked as taken stay recoverable for 7 days, then they are removed for good."""
-    db.execute("DELETE FROM items WHERE taken_at > 0 AND taken_at < ?", (int(time.time()) - 7 * 86400,))
+    """Items marked as taken stay recoverable for 15 minutes, then they are removed for good."""
+    db.execute("DELETE FROM items WHERE taken_at > 0 AND taken_at < ?", (int(time.time()) - TAKEN_GRACE_SECS,))
 
 
 def taken_items_html(t):
-    rows = list(db.execute("SELECT id, title, taken_at FROM items WHERE taken_at > 0 ORDER BY taken_at DESC"))
+    now = int(time.time())
+    rows = list(db.execute("SELECT id, title, taken_at FROM items WHERE taken_at > ? ORDER BY taken_at DESC",
+                           (now - TAKEN_GRACE_SECS,)))
     if not rows:
         return ""
-    now = int(time.time())
     out = ""
     for r in rows:
-        days = max(0, (now - r["taken_at"]) // 86400)
-        when = t["taken_today"] if days == 0 else t["taken_days"].format(days=days)
+        left = max(1, -(-(r["taken_at"] + TAKEN_GRACE_SECS - now) // 60))
+        when = t["taken_left"].format(mins=left)
         out += (
             f'<li><img src="/foto/{r["id"]}?t=1" alt="" loading="lazy" decoding="async">'
             f'<span class="taken-title"><strong>{esc(r["title"])}</strong><span class="taken-when">{esc(when)}</span></span>'
@@ -1611,30 +1618,27 @@ def home_dashboard(t, lang, is_admin):
         news_body = f'<p class="live-text">{esc(t["home_news_none"])}</p>'
     news = f'<a class="live-card live-news" href="/regeln"><h3>{esc(t["rules_nav"])}</h3>{news_body}</a>'
 
-    count = db.execute("SELECT COUNT(*) FROM items WHERE taken_at = 0").fetchone()[0]
-    recent = list(db.execute("SELECT id, title FROM items WHERE taken_at = 0 ORDER BY id DESC LIMIT 4"))
+    recent = list(db.execute("SELECT id, title FROM items WHERE taken_at = 0 ORDER BY id DESC LIMIT 2"))
     if recent:
-        thumbs = "".join(f'<img src="/foto/{r["id"]}?t=1" alt="{esc(r["title"])}" loading="lazy" decoding="async">' for r in recent)
-        shelf_body = f'<p class="live-big">{esc(t["home_shelf_count"].format(n=count))}</p><div class="live-thumbs">{thumbs}</div>'
+        thumbs = "".join(
+            f'<li><img src="/foto/{r["id"]}?t=1" alt="" loading="lazy" decoding="async"><span>{esc(r["title"])}</span></li>'
+            for r in recent)
+        shelf_body = f'<p class="live-big">{esc(t["home_shelf_latest"])}</p><ul class="live-thumbs">{thumbs}</ul>'
     else:
         shelf_body = f'<p class="live-text">{esc(t["home_shelf_empty"])}</p>'
     shelf = f'<a class="live-card live-shelf" href="/objekte"><h3>{esc(t["shelf"])}</h3>{shelf_body}</a>'
 
-    cleanup_expired_bookings()
-    extra = ""
+    # Guest room: residents book from the Guest Room page; only administrators get a card (open requests).
+    guest = ""
     if is_admin:
+        cleanup_expired_bookings()
         pending = db.execute("SELECT COUNT(*) FROM bookings WHERE status = 'pending'").fetchone()[0]
-        nxt = db.execute("SELECT arrival, departure FROM bookings WHERE status = 'approved' AND departure >= ? ORDER BY arrival LIMIT 1",
-                         (date.today().isoformat(),)).fetchone()
-        big = t["home_guest_requests"].format(n=pending) if pending else t["home_guest_none"]
-        small = t["home_guest_next"].format(arrival=fmt_date(nxt["arrival"]), departure=fmt_date(nxt["departure"])) if nxt else ""
+        label = t["home_guest_requests_one"] if pending == 1 else t["home_guest_requests_many"].format(n=pending)
         extra = " attention" if pending else ""
+        guest = (f'<a class="live-card live-guest{extra}" href="/gast"><h3>{esc(t["guest_room"])}</h3>'
+                 f'<p class="live-big">{esc(label)}</p></a>')
     else:
-        prices = [r["price"] for r in db.execute("SELECT price FROM rooms")]
-        big = t["home_guest_rooms"].format(n=len(prices), price=fmt_eur(min(prices))) if prices else ""
-        small = t["home_guest_hint"]
-    guest = (f'<a class="live-card live-guest{extra}" href="/gast"><h3>{esc(t["guest_room"])}</h3>'
-             f'<p class="live-big">{esc(big)}</p><p class="live-text">{esc(small)}</p></a>')
+        shelf = shelf.replace('class="live-card live-shelf"', 'class="live-card live-shelf wide"', 1)
     return f'<div class="live-grid">{laundry}{news}{shelf}{guest}</div>'
 
 
@@ -1685,11 +1689,14 @@ def page(title, body, nav="", lang="en", current_path="/", compact_title=False, 
         body_attrs.append(f'data-role="{esc(level)}"')
     body_tag = f"<body {' '.join(body_attrs)}>" if body_attrs else "<body>"
     h1_cls = ' class="compact-title"' if compact_title else ""
-    brand_icon = '<svg class="brand-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5 M5.5 10v10h13V10 M10 20v-5.5h4V20"/></svg>'
+    brand_icon = ('<span class="brand-mark"><svg class="brand-icon" aria-hidden="true" viewBox="0 0 24 24">'
+                  '<path d="M3 11.5 12 4l9 7.5 M5.5 10v10h13V10 M10 20v-5.5h4V20"/></svg></span>')
     return (
         f'<!doctype html><html lang="{lang}"><head><meta charset="utf-8">'
         f'<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">'
-        f'<meta name="color-scheme" content="light dark"><meta name="theme-color" content="#e02a00">'
+        f'<meta name="color-scheme" content="light dark">'
+        f'<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">'
+        f'<meta name="theme-color" content="#111318" media="(prefers-color-scheme: dark)">'
         f'<meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes">'
         f'<meta name="apple-mobile-web-app-title" content="{esc(t["brand"])}">'
         f'<link rel="manifest" href="/manifest.webmanifest">'
@@ -1978,15 +1985,15 @@ class Portal(BaseHTTPRequestHandler):
 
         if path == "/":
             cards = [
-                (t["shelf"], t["card_shelf_desc"], "objekte"),
-                (t["guest_room"], t["card_guest_desc"], "gast"),
-                (t["house_duties"], t["card_duties_desc"], "dienste"),
-                (t["laundry"], t["card_laundry_desc"], "wasch"),
-                (t["rules_card_title"], t["card_rules_desc"], "regeln"),
-                (t["activities_title"], t["card_activities_desc"], "aktivitaeten"),
+                (t["shelf"], t["card_shelf_desc"], "objekte", "shelf", 1),
+                (t["guest_room"], t["card_guest_desc"], "gast", "guest", 2),
+                (t["house_duties"], t["card_duties_desc"], "dienste", "duties", 3),
+                (t["laundry"], t["card_laundry_desc"], "wasch", "laundry", 5),
+                (t["rules_card_title"], t["card_rules_desc"], "regeln", "rules", 6),
+                (t["activities_title"], t["card_activities_desc"], "aktivitaeten", "activities", 7),
             ]
             if can_manage_passwords:
-                cards.append((t["admin_settings"], t["card_admin_desc"], "admin"))
+                cards.append((t["admin_settings"], t["card_admin_desc"], "admin", "admin", 4))
             with db:
                 sync_machines()
             body = (
@@ -1994,8 +2001,10 @@ class Portal(BaseHTTPRequestHandler):
                 + home_dashboard(t, lang, can_manage_guestroom)
                 + f'<h2 class="home-heading">{esc(t["home_all_sections"])}</h2>'
                 + '<div class="grid">' + "".join(
-                    f'<a class="card" href="/{url}"><h2>{title}</h2><p>{desc}</p></a>'
-                    for title, desc, url in cards
+                    f'<a class="card card-theme-{theme}" href="/{url}">'
+                    f'<span class="card-icon"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="{TAB_ICONS[icon]}"/></svg></span>'
+                    f'<span class="card-text"><h2>{title}</h2><p>{desc}</p></span>{CHEVRON}</a>'
+                    for title, desc, url, icon, theme in cards
                 ) + "</div>"
             )
             title = t["our_house"]
@@ -2122,6 +2131,7 @@ class Portal(BaseHTTPRequestHandler):
 
         elif path.startswith("/objekte/") and path[9:].isdigit():
             item_id = int(path[9:])
+            purge_taken_items()
             row = db.execute("SELECT id, title, description, tags, created_at, taken_at FROM items WHERE id=?", (item_id,)).fetchone()
             if not row:
                 return self.reply(t["page_unavailable"], 404)
@@ -3299,7 +3309,8 @@ class Portal(BaseHTTPRequestHandler):
                     db.execute("UPDATE items SET taken_at=? WHERE id=? AND taken_at=0", (int(time.time()), val("id")))
                     dest = "/objekte"
                 elif path == "/restore-item":
-                    db.execute("UPDATE items SET taken_at=0 WHERE id=?", (val("id"),))
+                    db.execute("UPDATE items SET taken_at=0 WHERE id=? AND taken_at > ?",
+                               (val("id"), int(time.time()) - TAKEN_GRACE_SECS))
                     dest = "/objekte"
                 elif path == "/machine-start":
                     sync_machines()
