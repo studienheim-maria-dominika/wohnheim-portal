@@ -99,3 +99,18 @@
 if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "127.0.0.1" || location.hostname === "localhost")) {
   window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js").catch(() => {}); });
 }
+
+// Tab bar: mark the tapped tab immediately so the app feels instant while the next page loads.
+document.querySelectorAll(".tabbar a.tab").forEach(tab => tab.addEventListener("click", e => {
+  if (e.metaKey || e.ctrlKey || e.shiftKey || tab.getAttribute("aria-current") === "page") return;
+  const bar = tab.closest(".tabbar");
+  bar.querySelectorAll(".going").forEach(t => t.classList.remove("going"));
+  bar.classList.add("navigating");
+  tab.classList.add("going");
+}));
+// Coming back with the browser's back button: undo that marking.
+window.addEventListener("pageshow", e => {
+  if (!e.persisted) return;
+  document.querySelectorAll(".tabbar").forEach(bar => bar.classList.remove("navigating"));
+  document.querySelectorAll(".tab.going").forEach(t => t.classList.remove("going"));
+});

@@ -1870,3 +1870,22 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 .usage-table thead th { color: var(--text-subtle); font-size: 0.75rem; font-weight: 600; }
 .usage-table tbody tr:last-child > * { border-bottom: 0; }
 footer a { color: inherit; text-decoration: underline; text-underline-offset: 0.2em; }
+
+/* ---------- Page changes: smooth cross-fade instead of a blank flash (Chrome, Safari 18+) ---------- */
+@view-transition { navigation: auto; }
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: 0.14s; }
+.site-header { view-transition-name: site-header; }
+.tabbar { view-transition-name: tabbar; }
+::view-transition-group(site-header), ::view-transition-group(tabbar) { animation: none; }
+
+/* Tab bar: the tapped tab lights up at once, while the next page loads */
+@media (max-width: 760px) {
+  .tab:active svg { background: var(--surface-2); }
+  .tabbar.navigating .tab[aria-current="page"]:not(.going) { color: var(--text-muted); font-weight: 550; }
+  .tabbar.navigating .tab[aria-current="page"]:not(.going) svg { background: transparent; }
+  .tabbar .tab.going { color: var(--tab-c); font-weight: 650; }
+  .tabbar .tab.going svg { background: var(--tab-tint); }
+}
+@media (prefers-reduced-motion: reduce) {
+  @view-transition { navigation: none; }
+}

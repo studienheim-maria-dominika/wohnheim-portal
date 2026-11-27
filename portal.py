@@ -1864,9 +1864,10 @@ class Portal(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def image(self, data):
-        """Send a stored photo. The browser keeps it and only re-checks (cheap 304) instead of re-downloading."""
+        """Send a stored photo. Phones reuse it for 10 minutes without asking again (fast tab switching),
+        then only re-check it (cheap 304). Short enough that a replaced photo shows up soon."""
         etag = '"%s"' % hashlib.blake2b(data, digest_size=10).hexdigest()
-        return self.reply(data, mime="image/jpeg", cache="private, no-cache", etag=etag)
+        return self.reply(data, mime="image/jpeg", cache="private, max-age=600", etag=etag)
 
     def client_ip(self):
         if TRUST_PROXY:
