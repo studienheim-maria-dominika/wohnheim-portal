@@ -77,9 +77,31 @@ PythonAnywhere emails the account address before that happens.
 
 ## 7. Making changes later
 
-1. Upload the changed files in **Files** (into the same folders, replacing the old ones).
-   **Never replace `demo.sqlite3` on the server**: that file holds all the live data.
+The code lives on GitHub: <https://github.com/studienheim-maria-dominika/wohnheim-portal> (public; it contains
+no passwords and no residents' data). Changes are made there (e.g. with Claude Code), then:
+
+1. On PythonAnywhere open **Consoles** → **Bash** and run:
+
+   ```bash
+   cd ~/claude-dorm-portal && git pull
+   ```
+
 2. **Web** tab → **Reload**.
+
+This only updates code files. The live data (`demo.sqlite3`) and the `backups` folder are never touched.
+
+**One-time link to GitHub** (already done if `git pull` works). In the Bash console:
+
+```bash
+cd ~/claude-dorm-portal
+git init -b main
+git remote add origin https://github.com/studienheim-maria-dominika/wohnheim-portal.git
+git fetch origin
+git reset --hard origin/main
+```
+
+**Without GitHub:** upload the changed files in **Files** instead (replacing the old ones), then **Reload**.
+**Never replace `demo.sqlite3` on the server**: that file holds all the live data.
 
 ## 8. Backups
 
@@ -105,6 +127,7 @@ e.g. before asking for paid hosting.
 ## Handover checklist (when the person running it moves out)
 
 - [ ] PythonAnywhere login (username + password) is given to the next person or the dorm management.
+- [ ] GitHub login (account `studienheim-maria-dominika`) is handed over too.
 - [ ] Account email (Account → Email) points to an address the dorm keeps.
 - [ ] Passwords for `leitung`, `dienstleiter` and `residents` are handed over (or changed after the handover).
 - [ ] The next person knows the "every 3 months" click (step 6).
