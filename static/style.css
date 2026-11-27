@@ -495,7 +495,7 @@ footer {
 .machine-dots li {
   --st: #22c55e;
   display: grid;
-  grid-template-columns: 0.55rem minmax(0, 1fr) auto;
+  grid-template-columns: 0.95rem minmax(0, 1fr) auto;
   align-items: center;
   gap: 0.5rem;
 }
@@ -511,7 +511,19 @@ footer {
 }
 .live-card:hover .machine-dots .dot { box-shadow: 0 0 0 2px var(--paper); }
 .machine-dots .m-name { overflow: hidden; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
-.machine-dots .m-state { opacity: 0.9; white-space: nowrap; }
+.machine-dots .m-state { display: inline-flex; align-items: center; gap: 0.35rem; opacity: 0.9; white-space: nowrap; }
+.machine-dots .dots { display: inline-flex; width: 0.95rem; }
+.machine-dots .dots .dot + .dot { margin-left: -0.15rem; }
+.machine-dots .dot.next { background: #facc15; }
+.m-next {
+  padding: 0.05rem 0.35rem;
+  border-radius: 999px;
+  background: #facc15;
+  color: #422006;
+  font-size: 0.62rem;
+  font-weight: 650;
+  line-height: 1.3;
+}
 
 .live-thumbs {
   display: grid;
@@ -849,6 +861,7 @@ button:disabled { background: var(--surface-2); color: var(--text-subtle); curso
 .btn-approve { --btn: var(--ok); --btn-ink: #ffffff; }
 .btn-reject,
 .btn-danger,
+.btn-delete,
 .btn-taken { --btn: var(--danger); --btn-ink: #ffffff; }
 
 /* Quiet "remove" buttons */
@@ -1443,7 +1456,11 @@ img {
 .act-card { position: relative; }
 .act-card .room-card-body { container-type: inline-size; }
 .act-card .activity-count { font-size: 0.75rem; white-space: nowrap; hyphens: none; }
-.act-card-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 0.4rem; margin-top: auto; padding-top: 0.4rem; }
+.act-card .room-card-body { flex-direction: row; align-items: flex-end; gap: 0.5rem; }
+.act-card-text { flex: 1; min-width: 0; }
+.act-card-text h3 { overflow-wrap: anywhere; }
+.act-card-text .activity-count { margin: 0.15rem 0 0; }
+.act-card-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 0.4rem; }
 .act-card-actions form { position: relative; z-index: 1; margin: 0; }
 .card-link { color: inherit; text-decoration: none; }
 .card-link:hover { text-decoration: none; }

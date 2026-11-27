@@ -585,6 +585,8 @@ TEXT = {
         "status_machine_occ": "Occupied",
         "status_machine_pend": "Pending (Reserved)",
         "free_at_time": "Free at {time}",
+        "ends_at_time": "Ends {time}",
+        "reserved_next_short": "reserved next",
         "pending_until_time": "Reserved until {time}",
         "time_left": "Time left",
         "start_time_label": "Start time *",
@@ -883,6 +885,8 @@ TEXT = {
         "status_machine_occ": "Belegt",
         "status_machine_pend": "Reserviert (Wartefenster)",
         "free_at_time": "Wieder frei um {time} Uhr",
+        "ends_at_time": "Endzeit: {time} Uhr",
+        "reserved_next_short": "reserviert",
         "pending_until_time": "Reserviert bis {time} Uhr",
         "time_left": "Verbleibend",
         "start_time_label": "Startzeit *",
@@ -1592,14 +1596,22 @@ def home_dashboard(t, lang, is_admin):
     rows = ""
     for m in machines:
         st = m["status"]
-        if st == "occupied":
+        reserved = st == "occupied" and m["reserved"]
+        if reserved:
+            state = t["ends_at_time"].format(time=fmt_clock(m["end_ts"]))
+        elif st == "occupied":
             state = t["free_at_time"].format(time=fmt_clock(m["end_ts"]))
         elif st == "pending":
             state = t["pending_until_time"].format(time=fmt_clock(m["pending_until"]))
         else:
             state = t["status_free"]
-        rows += (f'<li class="{st}"><span class="dot" aria-hidden="true"></span>'
-                 f'<span class="m-name">{esc(machine_title(m, lang))}</span><span class="m-state">{esc(state)}</span></li>')
+        dots = '<span class="dot" aria-hidden="true"></span>'
+        tag = ""
+        if reserved:
+            dots = '<span class="dots" aria-hidden="true"><span class="dot"></span><span class="dot next"></span></span>'
+            tag = f'<span class="m-next">{esc(t["reserved_next_short"])}</span>'
+        rows += (f'<li class="{st}{" reserved" if reserved else ""}">{dots}'
+                 f'<span class="m-name">{esc(machine_title(m, lang))}</span><span class="m-state">{tag}{esc(state)}</span></li>')
     if machines:
         laundry_body = (f'<p class="live-big">{esc(t["home_laundry_free"].format(free=free, total=len(machines)))}</p>'
                         f'<ul class="machine-dots">{rows}</ul>')
@@ -2659,8 +2671,8 @@ class Portal(BaseHTTPRequestHandler):
                         f'<article class="room-card act-card">'
                         f'<img src="/act-foto/{a["id"]}" alt="{esc(a["title"])}">'
                         f'<div class="room-card-body">'
-                        f'<h3><a class="card-link" href="/aktivitaeten/{a["id"]}">{esc(a["title"])}</a></h3>'
-                        f'<p class="item-meta activity-count">{esc(t["mini_activities_heading"])}: {mini_cnt}</p>'
+                        f'<div class="act-card-text"><h3><a class="card-link" href="/aktivitaeten/{a["id"]}">{esc(a["title"])}</a></h3>'
+                        f'<p class="item-meta activity-count">{esc(t["mini_activities_heading"])}: {mini_cnt}</p></div>'
                         f'<div class="act-card-actions">'
                         + form(
                             "remove-activity",
@@ -2704,7 +2716,7 @@ class Portal(BaseHTTPRequestHandler):
                 f'<a href="/aktivitaeten">{esc(t["back_activities"])}</a>'
                 + form(
                     "remove-activity",
-                    f'<input type="hidden" name="id" value="{act_id}">' + icon_control("trash", t["delete_activity_btn"]),
+                    f'<input type="hidden" name="id" value="{act_id}">' + button(esc(t["delete_activity_btn"]), "btn-delete btn-sm"),
                     extra=f'onsubmit="return confirm(\'{confirm_rm_act}\')"',
                 )
                 + "</div>"
@@ -2724,7 +2736,7 @@ class Portal(BaseHTTPRequestHandler):
                         f'<article class="room-card act-card">'
                         f'<img src="/mini-foto/{m["id"]}" alt="{esc(m["title"])}">'
                         f'<div class="room-card-body">'
-                        f'<h3><a class="card-link" href="/mini/{m["id"]}">{esc(m["title"])}</a></h3>'
+                        f'<div class="act-card-text"><h3><a class="card-link" href="/mini/{m["id"]}">{esc(m["title"])}</a></h3></div>'
                         f'<div class="act-card-actions">'
                         + form(
                             "remove-mini-activity",
@@ -2854,7 +2866,7 @@ class Portal(BaseHTTPRequestHandler):
                     "remove-mini-activity",
                     f'<input type="hidden" name="id" value="{mini_id}">'
                     f'<input type="hidden" name="activity_id" value="{act_id}">'
-                    + icon_control("trash", t["delete_mini_btn"]),
+                    + button(esc(t["delete_mini_btn"]), "btn-delete btn-sm"),
                     extra=f'onsubmit="return confirm(\'{confirm_rm_mini}\')"',
                 )
                 + "</div>"
