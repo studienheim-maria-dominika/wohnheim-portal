@@ -22,6 +22,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, urlparse
 
+# The house is in Germany: show and read clock times in German time (summer/winter time included),
+# even when the web host's computer runs on UTC. Change with the PORTAL_TZ environment variable.
+os.environ["TZ"] = os.environ.get("PORTAL_TZ", "Europe/Berlin")
+if hasattr(time, "tzset"):   # Linux/macOS (the web host). On Windows the PC's own clock setting is used.
+    time.tzset()
+
 ROOT = Path(__file__).resolve().parent
 STATIC = ROOT / "static"
 BACKUPS = ROOT / "backups"
