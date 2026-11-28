@@ -114,3 +114,86 @@ window.addEventListener("pageshow", e => {
   document.querySelectorAll(".tabbar").forEach(bar => bar.classList.remove("navigating"));
   document.querySelectorAll(".tab.going").forEach(t => t.classList.remove("going"));
 });
+
+// ---- Photos in notes: shrink on the phone before upload, show previews, open large on tap ----
+(() => {
+  const MAX = 4;
+  const de = document.documentElement.lang === "de";
+  const shrink = async (file, maxSide, quality) => {
+    if (!file || file.size > 25000000) throw Error();
+    const image = await createImageBitmap(file);
+    const scale = Math.min(1, maxSide / Math.max(image.width, image.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(image.width * scale));
+    canvas.height = Math.max(1, Math.round(image.height * scale));
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+    if (image.close) image.close();
+    return canvas.toDataURL("image/jpeg", quality).split(",")[1];
+  };
+
+  document.querySelectorAll("form .note-photo-input").forEach(input => {
+    const form = input.form;
+    const preview = form.querySelector(".note-photo-preview");
+    const body = form.querySelector('textarea[name="body"]');
+    const submit = form.querySelector("button:not([type=button])");
+    const sync = () => {
+      if (input.files.length > MAX) {
+        alert(de ? `Bitte höchstens ${MAX} Fotos auswählen.` : `Please choose at most ${MAX} photos.`);
+        input.value = "";
+      }
+      if (body) body.required = !input.files.length;   // a note can be just photos
+      if (preview) {
+        preview.querySelectorAll("img").forEach(img => URL.revokeObjectURL(img.src));
+        preview.innerHTML = "";
+        Array.from(input.files).forEach(file => {
+          const img = document.createElement("img");
+          img.alt = "";
+          img.src = URL.createObjectURL(file);
+          preview.appendChild(img);
+        });
+      }
+    };
+    input.addEventListener("change", sync);
+
+    form.addEventListener("submit", async event => {
+      if (!input.files.length || form.dataset.photosReady) return;
+      event.preventDefault();
+      if (submit) submit.disabled = true;
+      form.querySelectorAll('input[name="photos"], input[name="thumbs"]').forEach(el => el.remove());
+      try {
+        for (const file of Array.from(input.files).slice(0, MAX)) {
+          for (const [name, side, q] of [["photos", 1400, 0.8], ["thumbs", 480, 0.72]]) {
+            const field = document.createElement("input");
+            field.type = "hidden";
+            field.name = name;
+            field.value = await shrink(file, side, q);
+            form.appendChild(field);
+          }
+        }
+        form.dataset.photosReady = "1";
+        form.submit();
+      } catch (e) {
+        alert(de ? "Bitte wähle JPEG-, PNG- oder WebP-Fotos." : "Please choose JPEG, PNG or WebP photos.");
+        if (submit) submit.disabled = false;
+      }
+    });
+  });
+
+  // Tap a photo in a note: show it large; tap anywhere or press Escape to close.
+  const links = document.querySelectorAll("a.note-photo");
+  if (links.length && window.HTMLDialogElement) {
+    const viewer = document.createElement("dialog");
+    viewer.className = "photo-viewer";
+    viewer.innerHTML = '<img alt="">';
+    document.body.appendChild(viewer);
+    viewer.addEventListener("click", () => viewer.close());
+    links.forEach(link => link.addEventListener("click", e => {
+      e.preventDefault();
+      viewer.querySelector("img").src = link.href;
+      viewer.showModal();
+    }));
+  }
+})();

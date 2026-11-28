@@ -351,6 +351,9 @@ with db:
     for table in ("announcements", "mini_notes"):
         if "poll" not in {r[1] for r in db.execute(f"PRAGMA table_info({table})")}:
             db.execute(f"ALTER TABLE {table} ADD COLUMN poll TEXT NOT NULL DEFAULT ''")
+    db.execute("CREATE TABLE IF NOT EXISTS note_photos (id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, "
+               "note_id INTEGER NOT NULL, image BLOB NOT NULL, thumb BLOB, created_at INTEGER NOT NULL DEFAULT 0)")
+    db.execute("CREATE INDEX IF NOT EXISTS note_photos_note ON note_photos(kind, note_id)")
     db.execute("CREATE TABLE IF NOT EXISTS poll_votes (kind TEXT NOT NULL, note_id INTEGER NOT NULL, opt INTEGER NOT NULL, "
                "voter TEXT NOT NULL, PRIMARY KEY (kind, note_id, opt, voter))")
     if "description" not in item_cols:
@@ -1142,6 +1145,7 @@ TEXT["en"].update({
     "home_news_none": "No announcements yet.",
     "home_shelf_latest": "Latest added",
     "note_actions": "Actions",
+    "note_photos_label": "Photos (optional, up to 4)",
     "poll_label": "Poll (optional)",
     "poll_ph": "Saturday 2 pm\nSunday 4 pm",
     "poll_hint": "One answer per line (2 to 8). Everyone can tap all answers that suit them.",
@@ -1200,6 +1204,7 @@ TEXT["de"].update({
     "home_news_none": "Noch keine Mitteilungen.",
     "home_shelf_latest": "Zuletzt hinzugefügt",
     "note_actions": "Aktionen",
+    "note_photos_label": "Fotos (optional, bis zu 4)",
     "poll_label": "Umfrage (optional)",
     "poll_ph": "Samstag 14 Uhr\nSonntag 16 Uhr",
     "poll_hint": "Eine Antwort pro Zeile (2 bis 8). Alle können jede Antwort antippen, die passt.",
@@ -1330,6 +1335,48 @@ def linkify(raw):
         last = m.start() + len(m.group(0))
     out.append(esc((raw or "")[last:]))
     return "".join(out)
+
+
+NOTE_PHOTO_MAX = 4
+
+
+def _jpeg(raw, limit):
+    if not raw or len(raw) > limit:
+        return None
+    try:
+        data = base64.b64decode(raw, validate=True)
+    except ValueError:
+        return None
+    return data if data.startswith(b"\xff\xd8\xff") and data.endswith(b"\xff\xd9") else None
+
+
+def parse_note_photos(data):
+    """Photos attached to a new note: up to 4 JPEGs (already shrunk on the phone), each with an optional small copy."""
+    photos, thumbs = data.get("photos", []), data.get("thumbs", [])
+    if len(photos) > NOTE_PHOTO_MAX:
+        raise ValueError("photos")
+    out = []
+    for i, raw in enumerate(photos):
+        image = _jpeg(raw, 3000000)
+        if image is None:
+            raise ValueError("photos")
+        out.append((image, _jpeg(thumbs[i], 800000) if i < len(thumbs) else None))
+    return out
+
+
+def save_note_photos(kind, note_id, photos):
+    for image, thumb in photos:
+        db.execute("INSERT INTO note_photos(kind, note_id, image, thumb, created_at) VALUES (?,?,?,?,?)",
+                   (kind, note_id, image, thumb, int(time.time())))
+
+
+def note_photos_html(kind, note_id):
+    ids = [r[0] for r in db.execute("SELECT id FROM note_photos WHERE kind=? AND note_id=? ORDER BY id", (kind, note_id))]
+    if not ids:
+        return ""
+    cells = "".join(f'<a class="note-photo" href="/note-foto/{i}"><img src="/note-foto/{i}?t=1" alt="" loading="lazy" decoding="async"></a>'
+                    for i in ids)
+    return f'<div class="note-photos n{len(ids)}">{cells}</div>'
 
 
 POLL_MAX_OPTIONS = 8
@@ -1532,6 +1579,7 @@ def delete_mini_cascade(mini_id):
     db.execute("DELETE FROM mini_logs WHERE mini_id=?", (mini_id,))
     db.execute("DELETE FROM mini_members WHERE mini_id=?", (mini_id,))
     db.execute("DELETE FROM poll_votes WHERE kind='mini' AND note_id IN (SELECT id FROM mini_notes WHERE mini_id=?)", (mini_id,))
+    db.execute("DELETE FROM note_photos WHERE kind='mini' AND note_id IN (SELECT id FROM mini_notes WHERE mini_id=?)", (mini_id,))
     db.execute("DELETE FROM mini_notes WHERE mini_id=?", (mini_id,))
     db.execute("DELETE FROM mini_activities WHERE id=?", (mini_id,))
 
@@ -1618,7 +1666,8 @@ def note_card(row, t, voted, *, mini_id=None, manage=True, voter=""):
     poll = poll_html("mini" if mini else "ann", row, t, voter, mini_id)
     return (f'<article class="ann-card{" pinned" if pinned else ""}" id="note-{"mini" if mini else "ann"}-{key}">'
             f'<div class="ann-meta">{badge}<small>{stamp}</small>{tally}</div>'
-            f'{menu}{title}<p class="ann-body">{linkify(row["body"])}</p>{poll}{editor}</article>')
+            f'{menu}{title}' + (f'<p class="ann-body">{linkify(row["body"])}</p>' if (row["body"] or "").strip() else "")
+            + f'{note_photos_html("mini" if mini else "ann", key)}{poll}{editor}</article>')
 
 
 def panel(title, body, cls=""):
@@ -1651,6 +1700,7 @@ FIELD_LABELS = {
     "de": ("German text", "Deutscher Text"),
     "filename": ("File", "Datei"),
     "poll": ("Poll answers: 2 to 8 lines", "Umfrage-Antworten: 2 bis 8 Zeilen"),
+    "photos": ("Photos: up to 4 (JPEG, PNG or WebP)", "Fotos: höchstens 4 (JPEG, PNG oder WebP)"),
 }
 
 NAV_ITEMS = [
@@ -2160,6 +2210,13 @@ class Portal(BaseHTTPRequestHandler):
 
         if path.startswith("/foto/"):
             row = db.execute("SELECT image, thumb FROM items WHERE id=?", (path[6:],)).fetchone()
+            if not row:
+                return self.reply("", 404)
+            small = "t=1" in (parsed.query or "").split("&") and row["thumb"]
+            return self.image(row["thumb"] if small else row["image"])
+
+        if path.startswith("/note-foto/") and path[11:].isdigit():
+            row = db.execute("SELECT image, thumb FROM note_photos WHERE id=?", (int(path[11:]),)).fetchone()
             if not row:
                 return self.reply("", 404)
             small = "t=1" in (parsed.query or "").split("&") and row["thumb"]
@@ -2820,6 +2877,8 @@ class Portal(BaseHTTPRequestHandler):
                         "add-announcement",
                         f'<label>{esc(t["ann_title_label"])}<input type="text" name="title" maxlength="120" required></label>'
                         f'<label>{esc(t["ann_body_label"])}<textarea name="body" rows="4" maxlength="2000" required></textarea></label>'
+                        f'<label>{esc(t["note_photos_label"])}<input type="file" class="note-photo-input" accept="image/jpeg,image/png,image/webp" multiple></label>'
+                    f'<div class="note-photo-preview"></div>'
                         f'<label>{esc(t["poll_label"])}<textarea name="poll" rows="3" maxlength="800" placeholder="{esc(t["poll_ph"])}"></textarea>'
                     f'<small class="edit-hint">{esc(t["poll_hint"])}</small></label>'
                         f'<label class="tag-check"><input type="checkbox" name="pinned" value="1"><span>{esc(t["ann_pin_label"])}</span></label>'
@@ -3125,6 +3184,8 @@ class Portal(BaseHTTPRequestHandler):
                     f'<input type="hidden" name="mini_id" value="{mini_id}">'
                     f'<label>{esc(t["note_title_label"])}<input type="text" name="title" maxlength="120" placeholder="{esc(t["note_title_ph"])}"></label>'
                     f'<label>{esc(t["note_body_label"])}<textarea name="body" rows="3" maxlength="2000" placeholder="{esc(t["note_body_ph"])}" required></textarea></label>'
+                    f'<label>{esc(t["note_photos_label"])}<input type="file" class="note-photo-input" accept="image/jpeg,image/png,image/webp" multiple></label>'
+                    f'<div class="note-photo-preview"></div>'
                     f'<label>{esc(t["poll_label"])}<textarea name="poll" rows="3" maxlength="800" placeholder="{esc(t["poll_ph"])}"></textarea>'
                     f'<small class="edit-hint">{esc(t["poll_hint"])}</small></label>'
                     f'<label class="tag-check"><input type="checkbox" name="pinned" value="1"><span>{esc(t["note_pin_label"])}</span></label>'
@@ -3690,12 +3751,16 @@ class Portal(BaseHTTPRequestHandler):
                     n_title = data.get("title", [""])[0].strip()
                     if len(n_title) > 120:
                         raise ValueError()
-                    n_body = val("body", 2000)
+                    n_photos = parse_note_photos(data)
+                    n_body = data.get("body", [""])[0].strip()
+                    if len(n_body) > 2000 or not (n_body or n_photos):
+                        raise ValueError("body")
                     n_pin = 1 if data.get("pinned", ["0"])[0] == "1" else 0
-                    db.execute(
+                    cur = db.execute(
                         "INSERT INTO mini_notes(mini_id, title, body, pinned, votes, created_at, poll) VALUES (?,?,?,?,0,?,?)",
                         (m_id, n_title, n_body, n_pin, int(time.time()), parse_poll(data.get("poll", [""])[0])),
                     )
+                    save_note_photos("mini", cur.lastrowid, n_photos)
                     dest = f"/mini/{m_id}"
                 elif path == "/mini-note-edit":
                     n_id = int(val("id"))
@@ -3755,6 +3820,7 @@ class Portal(BaseHTTPRequestHandler):
                     m_id = int(val("mini_id"))
                     db.execute("DELETE FROM mini_notes WHERE id=? AND mini_id=?", (n_id, m_id))
                     db.execute("DELETE FROM poll_votes WHERE kind='mini' AND note_id=?", (n_id,))
+                    db.execute("DELETE FROM note_photos WHERE kind='mini' AND note_id=?", (n_id,))
                     dest = f"/mini/{m_id}"
                 elif path == "/mini-budget-settings":
                     m_id = int(val("mini_id"))
@@ -4001,12 +4067,16 @@ class Portal(BaseHTTPRequestHandler):
                         dest = "/regeln"
                     elif path == "/add-announcement":
                         a_title = val("title", 120)
-                        a_body = val("body", 2000)
+                        a_photos = parse_note_photos(data)
+                        a_body = data.get("body", [""])[0].strip()
+                        if len(a_body) > 2000 or not (a_body or a_photos):
+                            raise ValueError("body")
                         a_pin = 1 if data.get("pinned", ["0"])[0] == "1" else 0
-                        db.execute(
+                        cur = db.execute(
                             "INSERT INTO announcements(title, body, pinned, created_at, poll) VALUES (?,?,?,?,?)",
                             (a_title, a_body, a_pin, int(time.time()), parse_poll(data.get("poll", [""])[0])),
                         )
+                        save_note_photos("ann", cur.lastrowid, a_photos)
                         dest = "/regeln"
                     elif path == "/toggle-pin-announcement":
                         a_id = int(val("id"))
@@ -4015,6 +4085,7 @@ class Portal(BaseHTTPRequestHandler):
                     elif path == "/remove-announcement":
                         db.execute("DELETE FROM announcements WHERE id=?", (int(val("id")),))
                         db.execute("DELETE FROM poll_votes WHERE kind='ann' AND note_id=?", (int(val("id")),))
+                        db.execute("DELETE FROM note_photos WHERE kind='ann' AND note_id=?", (int(val("id")),))
                         dest = "/regeln"
                     elif path == "/upload-rules-pdf":
                         fname = val("filename", 140)
