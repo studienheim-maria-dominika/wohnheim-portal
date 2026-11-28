@@ -20,8 +20,8 @@ Ideas and agreed changes that are not built yet. Collected here so several can b
 - **"Dienstleiter" in English on the English version.**
   The English texts still say "Dienstleiter" (header badge, login page "Dienstleiter Access", the switch links
   on the login page, "Change Dienstleiter Password", "Change and log out Dienstleiter", "Back to Dienstleiter").
-  Change: use an English word in all of these, e.g. **"Duty Manager"** (alternatives: "Duty Lead",
-  "House Coordinator"; confirm the wording before building). Only the displayed text changes: the login
+  Change: use **"Coordinator"** in all of these (decided), e.g. "Coordinator Access", "Change Coordinator
+  Password", "Back to Coordinator". Only the displayed text changes: the login
   account name stays `dienstleiter`, and the German version keeps "Dienstleiter".
 
 ## Decided against
