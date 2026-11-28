@@ -348,6 +348,11 @@ booking_cols = {r[1] for r in db.execute("PRAGMA table_info(bookings)")}
 with db:
     if "votes" not in {r[1] for r in db.execute("PRAGMA table_info(announcements)")}:
         db.execute("ALTER TABLE announcements ADD COLUMN votes INTEGER NOT NULL DEFAULT 0")
+    for table in ("announcements", "mini_notes"):
+        if "poll" not in {r[1] for r in db.execute(f"PRAGMA table_info({table})")}:
+            db.execute(f"ALTER TABLE {table} ADD COLUMN poll TEXT NOT NULL DEFAULT ''")
+    db.execute("CREATE TABLE IF NOT EXISTS poll_votes (kind TEXT NOT NULL, note_id INTEGER NOT NULL, opt INTEGER NOT NULL, "
+               "voter TEXT NOT NULL, PRIMARY KEY (kind, note_id, opt, voter))")
     if "description" not in item_cols:
         db.execute("ALTER TABLE items ADD COLUMN description TEXT DEFAULT ''")
     if "thumb" not in item_cols:
@@ -1137,6 +1142,12 @@ TEXT["en"].update({
     "home_news_none": "No announcements yet.",
     "home_shelf_latest": "Latest added",
     "note_actions": "Actions",
+    "poll_label": "Poll (optional)",
+    "poll_ph": "Saturday 2 pm\nSunday 4 pm",
+    "poll_hint": "One answer per line (2 to 8). Everyone can tap all answers that suit them.",
+    "poll_voters_one": "1 person voted",
+    "poll_voters_many": "{n} people voted",
+    "poll_multi": "tap all that suit you",
     "home_guest_requests_one": "1 request",
     "home_guest_requests_many": "{n} requests",
     "home_shelf_empty": "The shelf is empty.",
@@ -1189,6 +1200,12 @@ TEXT["de"].update({
     "home_news_none": "Noch keine Mitteilungen.",
     "home_shelf_latest": "Zuletzt hinzugefügt",
     "note_actions": "Aktionen",
+    "poll_label": "Umfrage (optional)",
+    "poll_ph": "Samstag 14 Uhr\nSonntag 16 Uhr",
+    "poll_hint": "Eine Antwort pro Zeile (2 bis 8). Alle können jede Antwort antippen, die passt.",
+    "poll_voters_one": "1 Person hat abgestimmt",
+    "poll_voters_many": "{n} Personen haben abgestimmt",
+    "poll_multi": "Mehrfachauswahl möglich",
     "home_guest_requests_one": "1 Anfrage",
     "home_guest_requests_many": "{n} Anfragen",
     "home_shelf_empty": "Der Schrank ist leer.",
@@ -1288,6 +1305,83 @@ def sync_machines():
             db.execute("UPDATE machines SET status='free', start_ts=0, end_ts=0, reserved=0, pending_until=0 WHERE id=?", (m["id"],))
 
 
+URL_RE = re.compile(r"(https?://[^\s<>\"']+|www\.[^\s<>\"']+\.[^\s<>\"']+)", re.I)
+
+
+def linkify(raw):
+    """Escape text and turn web addresses into links (new tab). Long addresses are shortened on screen."""
+    out, last = [], 0
+    for m in URL_RE.finditer(raw or ""):
+        url = m.group(0)
+        trail = ""
+        while url and url[-1] in ".,;:!?)]}\u201c\u201d\u2019":
+            if url[-1] == ")" and url.count("(") >= url.count(")"):
+                break
+            trail = url[-1] + trail
+            url = url[:-1]
+        if len(url) < 5:
+            continue
+        href = url if url.lower().startswith("http") else "https://" + url
+        shown = re.sub(r"^https?://(www\.)?", "", url, flags=re.I)
+        if len(shown) > 42:
+            shown = shown[:40] + "\u2026"
+        out.append(esc(raw[last:m.start()]))
+        out.append(f'<a class="text-link" href="{esc(href)}" target="_blank" rel="noopener noreferrer nofollow">{esc(shown)}</a>{esc(trail)}')
+        last = m.start() + len(m.group(0))
+    out.append(esc((raw or "")[last:]))
+    return "".join(out)
+
+
+POLL_MAX_OPTIONS = 8
+
+
+def parse_poll(raw):
+    """Poll options from the 'one answer per line' box: 2 to 8 distinct lines, or none at all."""
+    opts = []
+    for line in (raw or "").splitlines():
+        line = line.strip().lstrip("-*\u2022 ").strip()
+        if line and line.lower() not in (o.lower() for o in opts):
+            opts.append(line[:80])
+    if not opts:
+        return ""
+    if len(opts) < 2 or len(opts) > POLL_MAX_OPTIONS:
+        raise ValueError("poll")
+    return json.dumps(opts, ensure_ascii=False)
+
+
+def poll_html(kind, row, t, voter, mini_id=None):
+    try:
+        opts = json.loads(row["poll"] or "[]")
+    except (ValueError, TypeError, IndexError, KeyError):
+        return ""
+    if not opts:
+        return ""
+    counts = [0] * len(opts)
+    mine = set()
+    voters = set()
+    for r in db.execute("SELECT opt, voter FROM poll_votes WHERE kind=? AND note_id=?", (kind, row["id"])):
+        if 0 <= r["opt"] < len(opts):
+            counts[r["opt"]] += 1
+            voters.add(r["voter"])
+            if voter and r["voter"] == voter:
+                mine.add(r["opt"])
+    top = max(counts) or 1
+    hidden = f'<input type="hidden" name="kind" value="{kind}"><input type="hidden" name="id" value="{row["id"]}">'
+    if mini_id is not None:
+        hidden += f'<input type="hidden" name="mini_id" value="{mini_id}">'
+    items = ""
+    for i, label in enumerate(opts):
+        chosen = i in mine
+        lead = " lead" if counts[i] and counts[i] == max(counts) else ""
+        items += form("poll-vote", hidden + f'<input type="hidden" name="opt" value="{i}">'
+                      f'<button class="poll-option{lead}" aria-pressed="{str(chosen).lower()}" style="--p:{round(100 * counts[i] / top)}%">'
+                      f'<span class="poll-check" aria-hidden="true"></span><span class="poll-label">{esc(label)}</span>'
+                      f'<span class="poll-count">{counts[i]}</span></button>')
+    n = len(voters)
+    summary = t["poll_voters_one"] if n == 1 else t["poll_voters_many"].format(n=n)
+    return (f'<div class="poll">{items}<p class="poll-meta">{esc(summary)} · {esc(t["poll_multi"])}</p></div>')
+
+
 def render_message_html(raw):
     lines = [ln.rstrip() for ln in (raw or "").splitlines()]
     out = []
@@ -1303,12 +1397,12 @@ def render_message_html(raw):
             if not in_list:
                 out.append("<ul>")
                 in_list = True
-            out.append(f"<li>{esc(stripped[2:].strip())}</li>")
+            out.append(f"<li>{linkify(stripped[2:].strip())}</li>")
         else:
             if in_list:
                 out.append("</ul>")
                 in_list = False
-            out.append(f"<p>{esc(stripped)}</p>")
+            out.append(f"<p>{linkify(stripped)}</p>")
     if in_list:
         out.append("</ul>")
     return "".join(out)
@@ -1437,6 +1531,7 @@ def delete_mini_cascade(mini_id):
         db.execute("DELETE FROM mini_log_photos WHERE log_id=?", (lid,))
     db.execute("DELETE FROM mini_logs WHERE mini_id=?", (mini_id,))
     db.execute("DELETE FROM mini_members WHERE mini_id=?", (mini_id,))
+    db.execute("DELETE FROM poll_votes WHERE kind='mini' AND note_id IN (SELECT id FROM mini_notes WHERE mini_id=?)", (mini_id,))
     db.execute("DELETE FROM mini_notes WHERE mini_id=?", (mini_id,))
     db.execute("DELETE FROM mini_activities WHERE id=?", (mini_id,))
 
@@ -1483,7 +1578,7 @@ def icon_control(kind, label, *, tag="button", attrs="", count=None, pressed=Non
             f'{number}</{tag}>')
 
 
-def note_card(row, t, voted, *, mini_id=None, manage=True):
+def note_card(row, t, voted, *, mini_id=None, manage=True, voter=""):
     mini = mini_id is not None
     prefix = "mini-note" if mini else "announcement"
     key = row["id"]
@@ -1520,8 +1615,10 @@ def note_card(row, t, voted, *, mini_id=None, manage=True):
     menu = (f'<details class="note-menu"><summary aria-label="{esc(t["note_actions"])}" title="{esc(t["note_actions"])}">'
             f'<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 12h.01 M12 12h.01 M19 12h.01"/></svg></summary>'
             f'<div class="note-tools">{actions}</div></details>')
-    return (f'<article class="ann-card{" pinned" if pinned else ""}"><div class="ann-meta">{badge}<small>{stamp}</small>{tally}</div>'
-            f'{menu}{title}<p class="ann-body">{esc(row["body"])}</p>{editor}</article>')
+    poll = poll_html("mini" if mini else "ann", row, t, voter, mini_id)
+    return (f'<article class="ann-card{" pinned" if pinned else ""}" id="note-{"mini" if mini else "ann"}-{key}">'
+            f'<div class="ann-meta">{badge}<small>{stamp}</small>{tally}</div>'
+            f'{menu}{title}<p class="ann-body">{linkify(row["body"])}</p>{poll}{editor}</article>')
 
 
 def panel(title, body, cls=""):
@@ -1553,6 +1650,7 @@ FIELD_LABELS = {
     "en": ("English text", "Englischer Text"),
     "de": ("German text", "Deutscher Text"),
     "filename": ("File", "Datei"),
+    "poll": ("Poll answers: 2 to 8 lines", "Umfrage-Antworten: 2 bis 8 Zeilen"),
 }
 
 NAV_ITEMS = [
@@ -1948,6 +2046,12 @@ class Portal(BaseHTTPRequestHandler):
             pass
         return jar
 
+    def voter_id(self):
+        """Anonymous id of this phone/browser for poll votes (a random cookie, no name)."""
+        jar = self._cookies()
+        value = jar["voter"].value if "voter" in jar else ""
+        return value if re.fullmatch(r"[A-Za-z0-9_-]{16,64}", value or "") else ""
+
     def token(self):
         jar = self._cookies()
         return jar["session"].value if "session" in jar else ""
@@ -1976,9 +2080,11 @@ class Portal(BaseHTTPRequestHandler):
             return "dienstleiter"
         return "admin"
 
-    def redirect(self, path="/", cookie=None, lang_cookie=None, max_age=None):
+    def redirect(self, path="/", cookie=None, lang_cookie=None, max_age=None, voter_cookie=None):
         self.send_response(303)
         secure = "; Secure" if SECURE_COOKIES else ""
+        if voter_cookie:
+            self.send_header("Set-Cookie", "voter=" + voter_cookie + "; HttpOnly; SameSite=Strict; Path=/; Max-Age=34560000" + secure)
         if cookie is not None:
             life = "; Max-Age=%d" % max_age if (cookie and max_age) else ("; Max-Age=0" if not cookie else "")
             self.send_header("Set-Cookie", "session=" + cookie + "; HttpOnly; SameSite=Strict; Path=/" + life + secure)
@@ -2695,7 +2801,7 @@ class Portal(BaseHTTPRequestHandler):
             title = t["rules_card_title"].replace("\u00ad", "")
             ann_rows = list(db.execute("SELECT * FROM announcements ORDER BY pinned DESC, id DESC"))
             votes = session_votes.get(self.token(), set())
-            ann_cards = [note_card(a, t, ("announcement", a["id"]) in votes, manage=can_manage_rules_news)
+            ann_cards = [note_card(a, t, ("announcement", a["id"]) in votes, manage=can_manage_rules_news, voter=self.voter_id())
                          for a in ann_rows]
 
             ann_list_html = (
@@ -2714,6 +2820,8 @@ class Portal(BaseHTTPRequestHandler):
                         "add-announcement",
                         f'<label>{esc(t["ann_title_label"])}<input type="text" name="title" maxlength="120" required></label>'
                         f'<label>{esc(t["ann_body_label"])}<textarea name="body" rows="4" maxlength="2000" required></textarea></label>'
+                        f'<label>{esc(t["poll_label"])}<textarea name="poll" rows="3" maxlength="800" placeholder="{esc(t["poll_ph"])}"></textarea>'
+                    f'<small class="edit-hint">{esc(t["poll_hint"])}</small></label>'
                         f'<label class="tag-check"><input type="checkbox" name="pinned" value="1"><span>{esc(t["ann_pin_label"])}</span></label>'
                         + button(t["publish_ann_btn"]),
                     )
@@ -3000,7 +3108,7 @@ class Portal(BaseHTTPRequestHandler):
                 )
             )
             voted_set = session_votes.get(self.token(), set())
-            note_cards = [note_card(n, t, n["id"] in voted_set, mini_id=mini_id) for n in notes_rows]
+            note_cards = [note_card(n, t, n["id"] in voted_set, mini_id=mini_id, voter=self.voter_id()) for n in notes_rows]
 
             notes_list_html = (
                 f'<div class="ann-list">{"".join(note_cards)}</div>'
@@ -3017,6 +3125,8 @@ class Portal(BaseHTTPRequestHandler):
                     f'<input type="hidden" name="mini_id" value="{mini_id}">'
                     f'<label>{esc(t["note_title_label"])}<input type="text" name="title" maxlength="120" placeholder="{esc(t["note_title_ph"])}"></label>'
                     f'<label>{esc(t["note_body_label"])}<textarea name="body" rows="3" maxlength="2000" placeholder="{esc(t["note_body_ph"])}" required></textarea></label>'
+                    f'<label>{esc(t["poll_label"])}<textarea name="poll" rows="3" maxlength="800" placeholder="{esc(t["poll_ph"])}"></textarea>'
+                    f'<small class="edit-hint">{esc(t["poll_hint"])}</small></label>'
                     f'<label class="tag-check"><input type="checkbox" name="pinned" value="1"><span>{esc(t["note_pin_label"])}</span></label>'
                     + button(t["post_note_btn"]),
                 )
@@ -3381,6 +3491,7 @@ class Portal(BaseHTTPRequestHandler):
                 sessions.pop(tok, None)
                 session_votes.pop(tok, None)
                 return self.redirect("/", "")
+            new_voter = None
             with db:
                 if path == "/book":
                     room_id = int(val("room_id"))
@@ -3582,8 +3693,8 @@ class Portal(BaseHTTPRequestHandler):
                     n_body = val("body", 2000)
                     n_pin = 1 if data.get("pinned", ["0"])[0] == "1" else 0
                     db.execute(
-                        "INSERT INTO mini_notes(mini_id, title, body, pinned, votes, created_at) VALUES (?,?,?,?,0,?)",
-                        (m_id, n_title, n_body, n_pin, int(time.time())),
+                        "INSERT INTO mini_notes(mini_id, title, body, pinned, votes, created_at, poll) VALUES (?,?,?,?,0,?,?)",
+                        (m_id, n_title, n_body, n_pin, int(time.time()), parse_poll(data.get("poll", [""])[0])),
                     )
                     dest = f"/mini/{m_id}"
                 elif path == "/mini-note-edit":
@@ -3616,11 +3727,34 @@ class Portal(BaseHTTPRequestHandler):
                     else:
                         voted.add(n_id)
                         db.execute("UPDATE mini_notes SET votes = votes + 1 WHERE id=? AND mini_id=?", (n_id, m_id))
-                    dest = f"/mini/{m_id}"
+                    dest = f"/mini/{m_id}#note-mini-{n_id}"
+                elif path == "/poll-vote":
+                    kind = val("kind", 4)
+                    n_id = int(val("id"))
+                    opt = int(data.get("opt", [""])[0])
+                    if kind == "mini":
+                        row = db.execute("SELECT poll, mini_id FROM mini_notes WHERE id=?", (n_id,)).fetchone()
+                        dest = f"/mini/{row['mini_id']}#note-mini-{n_id}" if row else "/aktivitaeten"
+                    elif kind == "ann":
+                        row = db.execute("SELECT poll FROM announcements WHERE id=?", (n_id,)).fetchone()
+                        dest = f"/regeln#note-ann-{n_id}"
+                    else:
+                        raise ValueError()
+                    if not row or not (0 <= opt < len(json.loads(row["poll"] or "[]"))):
+                        raise ValueError()
+                    voter = self.voter_id()
+                    if not voter:
+                        voter = new_voter = secrets.token_urlsafe(18)
+                    key = (kind, n_id, opt, voter)
+                    if db.execute("SELECT 1 FROM poll_votes WHERE kind=? AND note_id=? AND opt=? AND voter=?", key).fetchone():
+                        db.execute("DELETE FROM poll_votes WHERE kind=? AND note_id=? AND opt=? AND voter=?", key)
+                    else:
+                        db.execute("INSERT INTO poll_votes(kind, note_id, opt, voter) VALUES (?,?,?,?)", key)
                 elif path == "/mini-note-delete":
                     n_id = int(val("id"))
                     m_id = int(val("mini_id"))
                     db.execute("DELETE FROM mini_notes WHERE id=? AND mini_id=?", (n_id, m_id))
+                    db.execute("DELETE FROM poll_votes WHERE kind='mini' AND note_id=?", (n_id,))
                     dest = f"/mini/{m_id}"
                 elif path == "/mini-budget-settings":
                     m_id = int(val("mini_id"))
@@ -3870,8 +4004,8 @@ class Portal(BaseHTTPRequestHandler):
                         a_body = val("body", 2000)
                         a_pin = 1 if data.get("pinned", ["0"])[0] == "1" else 0
                         db.execute(
-                            "INSERT INTO announcements(title, body, pinned, created_at) VALUES (?,?,?,?)",
-                            (a_title, a_body, a_pin, int(time.time())),
+                            "INSERT INTO announcements(title, body, pinned, created_at, poll) VALUES (?,?,?,?,?)",
+                            (a_title, a_body, a_pin, int(time.time()), parse_poll(data.get("poll", [""])[0])),
                         )
                         dest = "/regeln"
                     elif path == "/toggle-pin-announcement":
@@ -3880,6 +4014,7 @@ class Portal(BaseHTTPRequestHandler):
                         dest = "/regeln"
                     elif path == "/remove-announcement":
                         db.execute("DELETE FROM announcements WHERE id=?", (int(val("id")),))
+                        db.execute("DELETE FROM poll_votes WHERE kind='ann' AND note_id=?", (int(val("id")),))
                         dest = "/regeln"
                     elif path == "/upload-rules-pdf":
                         fname = val("filename", 140)
@@ -3928,7 +4063,7 @@ class Portal(BaseHTTPRequestHandler):
                     return self.reply("", 404)
             if path in USAGE_ACTIONS:
                 count_usage(USAGE_ACTIONS[path])
-            self.redirect(dest)
+            self.redirect(dest, voter_cookie=new_voter)
         except (ValueError, OverflowError) as err:
             reason = str(err.args[0]) if err.args else ""
             if reason == "conflict":

@@ -1889,3 +1889,62 @@ footer a { color: inherit; text-decoration: underline; text-underline-offset: 0.
 @media (prefers-reduced-motion: reduce) {
   @view-transition { navigation: none; }
 }
+
+/* ---------- Links inside notes and messages ---------- */
+.text-link { color: var(--accent-strong); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 0.18em; overflow-wrap: anywhere; }
+.text-link:hover { text-decoration-thickness: 2px; }
+.live-card .text-link { color: inherit; }
+
+/* ---------- Polls inside notes ---------- */
+.poll { display: grid; gap: 0.35rem; margin-top: 0.6rem; }
+.poll form { display: block; margin: 0; }
+.poll-option {
+  --p: 0%;
+  position: relative;
+  display: grid;
+  grid-template-columns: 1.1rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  min-height: 2.5rem;
+  padding: 0.45rem 0.75rem;
+  overflow: hidden;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 16%, transparent) var(--p), var(--paper) var(--p));
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  box-shadow: none;
+  font-size: 0.88rem;
+  font-weight: 500;
+  text-align: left;
+  transition: border-color 0.15s ease, background 0.25s ease;
+}
+.poll-option:hover:not(:disabled) { border-color: color-mix(in srgb, var(--accent) 45%, transparent); filter: none; }
+.poll-option.lead { font-weight: 650; }
+.poll-option[aria-pressed="true"] { border-color: var(--accent); }
+.poll-check {
+  display: grid;
+  place-items: center;
+  width: 1.1rem;
+  height: 1.1rem;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 5px;
+  background: var(--paper);
+}
+.poll-option[aria-pressed="true"] .poll-check { background: var(--accent-strong); border-color: var(--accent-strong); }
+.poll-option[aria-pressed="true"] .poll-check::after {
+  content: "";
+  width: 0.3rem;
+  height: 0.55rem;
+  margin-top: -0.12rem;
+  border: solid #ffffff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.poll-label { min-width: 0; overflow-wrap: anywhere; }
+.poll-count { color: var(--text-muted); font-size: 0.8rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+.poll-meta { margin: 0.15rem 0 0; color: var(--text-subtle); font-size: 0.72rem; }
+.ann-card.pinned .poll-option { background: linear-gradient(90deg, color-mix(in srgb, var(--card-2) 22%, transparent) var(--p), var(--paper) var(--p)); }
+:target.ann-card { animation: note-flash 1.2s ease-out; scroll-margin-top: 5rem; }
+.ann-card { scroll-margin-top: 5rem; }
+@keyframes note-flash { from { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent); } to { box-shadow: var(--shadow-sm); } }

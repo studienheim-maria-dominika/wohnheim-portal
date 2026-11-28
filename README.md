@@ -81,6 +81,7 @@ To go back to an earlier state, stop the server and copy a file from `backups/` 
 - Home page: compact "Right now" cards in solid section colours (white text, light on hover). The shelf card shows the two most recently added items. Residents no longer see a guest room card; administrators see "x requests".
 - Notes and announcements: the title is italic and text-sized; edit, pin, vote and delete sit behind a small "…" menu in the top-right corner.
 - Exchange shelf: "Put back" works for 15 minutes after an item is marked as taken.
+- Polls: a note or announcement can include a poll (one answer per line, everyone can tick several). Web addresses in notes and messages are clickable.
 - Ready for the internet: runs on PythonAnywhere (wsgi.py), hidden from search engines, "Install the app" page with printable QR poster, offline screen, anonymous usage numbers for the administration.
 
 - Phone: bottom tab bar (Home, Laundry, Shelf, Activities, More), larger tap targets, one-row header, dark mode that follows the phone setting.
